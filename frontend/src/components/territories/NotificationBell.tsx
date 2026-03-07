@@ -185,7 +185,7 @@ export function NotificationBell() {
                     <div style={{ flex:1, minWidth:0 }}>
                       <div style={{ display:'flex', justifyContent:'space-between', gap:8, alignItems:'flex-start' }}>
                         <p style={{ fontWeight: isUnread ? 700 : 600, color:'#111827', fontSize:13, margin:0, lineHeight:1.4 }}>
-                          {(meta.leadName ?? `${lead?.firstName ?? ''} ${lead?.lastName ?? ''}`.trim()) || 'New Lead'}
+                          {meta.leadName ?? `${lead?.firstName ?? ''} ${lead?.lastName ?? ''}`.trim() || 'New Lead'}
                         </p>
                         <div style={{ display:'flex', alignItems:'center', gap:4, flexShrink:0 }}>
                           {isUnread && (

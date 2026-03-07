@@ -17,7 +17,7 @@ import { useQuery } from '@tanstack/react-query';
 import { subscriptionApi } from '@/lib/billingApi';
 import { Lock, ArrowRight, Zap } from 'lucide-react';
 import Link from 'next/link';
-import { PLANS } from '../../lib/plansConfig'; // import static config on frontend
+import { PLANS } from '../../../lib/plansConfig'; // import static config on frontend
 
 interface PlanGateProps {
   children:      React.ReactNode;

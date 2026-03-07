@@ -3,13 +3,11 @@ import { Inter } from 'next/font/google';
 import './globals.css';
 import { Providers } from './providers';
 
-export const dynamic = 'force-dynamic';
-
 const inter = Inter({ subsets: ['latin'], variable: '--font-geist-sans' });
 
 export const metadata: Metadata = {
   title: 'LeadSphere Pro — Real Estate CRM',
-  description: 'AI-powered CRM for real estate.',
+  description: 'AI-powered lead generation and management platform for real estate professionals.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
