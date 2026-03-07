@@ -1,0 +1,153 @@
+// ═══════════════════════════════════════════════════════
+// APPEND THESE MODELS TO YOUR EXISTING schema.prisma
+// ═══════════════════════════════════════════════════════
+
+// ── Service types supported ─────────────────────────────
+enum ServiceType {
+  SELL_HOUSE_FAST
+  CASH_OFFER
+  FORECLOSURE
+  PROBATE
+  DIVORCE_SALE
+  FIRST_TIME_BUYER
+  REFINANCE
+  INVESTMENT_PROPERTY
+}
+
+enum PageStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+// ── SEO Templates ────────────────────────────────────────
+model SeoTemplate {
+  id          String      @id @default(uuid())
+  name        String
+  slug        String      @unique
+  serviceType ServiceType
+  description String?
+
+  // Content templates — use {{variable}} placeholders
+  titleTemplate           String
+  metaDescTemplate        String
+  h1Template              String
+  heroHeadlineTemplate    String
+  heroSubheadlineTemplate String
+  bodyTemplate            String  @db.Text
+  faqTemplate             Json    @default("[]")
+  ctaText                 String  @default("Get My Cash Offer")
+  ctaSubtext              String?
+
+  // AI settings
+  aiEnabled         Boolean @default(true)
+  aiPromptAdditions String?
+
+  isActive  Boolean     @default(true)
+  pages     SeoPage[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt     @map("updated_at")
+
+  @@index([serviceType])
+  @@map("seo_templates")
+}
+
+// ── Locations (ZIP-level granularity) ───────────────────
+model Location {
+  id              String  @id @default(uuid())
+  zipCode         String  @unique @map("zip_code")
+  city            String
+  county          String?
+  state           String
+  stateCode       String  @map("state_code")
+  latitude        Decimal? @db.Decimal(9,6)
+  longitude       Decimal? @db.Decimal(9,6)
+  population      Int?
+  medianIncome    Int?    @map("median_income")
+  medianHomeValue Int?    @map("median_home_value")
+  isActive        Boolean @default(true)  @map("is_active")
+  priority        Int     @default(0)
+
+  pages SeoPage[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt     @map("updated_at")
+
+  @@index([stateCode])
+  @@index([isActive, priority])
+  @@map("locations")
+}
+
+// ── Generated SEO Pages ──────────────────────────────────
+model SeoPage {
+  id         String      @id @default(uuid())
+  templateId String      @map("template_id")
+  template   SeoTemplate @relation(fields: [templateId], references: [id])
+  locationId String      @map("location_id")
+  location   Location    @relation(fields: [locationId], references: [id])
+
+  // Canonical URL: /va/arlington/22201/sell-my-house-fast
+  fullPath   String @unique @map("full_path")
+
+  // Rendered content (stored for instant retrieval)
+  title           String
+  metaDescription String   @map("meta_description") @db.Text
+  h1              String
+  heroHeadline    String   @map("hero_headline")
+  heroSubheadline String   @map("hero_subheadline")
+  bodyHtml        String   @map("body_html")         @db.Text
+  faqJson         Json     @default("[]")            @map("faq_json")
+  schemaJson      Json     @default("{}")            @map("schema_json")
+  ctaText         String   @default("Get My Cash Offer") @map("cta_text")
+  ctaSubtext      String?  @map("cta_subtext")
+
+  // AI metadata
+  aiGenerated   Boolean   @default(false) @map("ai_generated")
+  aiGeneratedAt DateTime? @map("ai_generated_at")
+
+  status      PageStatus @default(DRAFT)
+  publishedAt DateTime?  @map("published_at")
+
+  // Analytics (lightweight counters)
+  views Int @default(0)
+  leads Int @default(0)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt     @map("updated_at")
+
+  @@index([status])
+  @@index([templateId])
+  @@index([locationId])
+  @@index([views])
+  @@map("seo_pages")
+}
+
+// ── Generation Jobs (async tracking) ────────────────────
+model SeoGenerationJob {
+  id             String    @id @default(uuid())
+  templateId     String    @map("template_id")
+  status         JobStatus @default(PENDING)
+  totalPages     Int       @default(0) @map("total_pages")
+  generatedPages Int       @default(0) @map("generated_pages")
+  failedPages    Int       @default(0) @map("failed_pages")
+  errorLog       Json      @default("[]") @map("error_log")
+  startedAt      DateTime? @map("started_at")
+  completedAt    DateTime? @map("completed_at")
+  triggeredBy    String    @map("triggered_by")
+  useAi          Boolean   @default(false) @map("use_ai")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt     @map("updated_at")
+
+  @@index([status])
+  @@map("seo_generation_jobs")
+}

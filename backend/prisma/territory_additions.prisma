@@ -1,0 +1,230 @@
+// ═══════════════════════════════════════════════════════════════════════
+// APPEND THESE MODELS TO YOUR EXISTING schema.prisma
+// Lead Territory Distribution System
+// ═══════════════════════════════════════════════════════════════════════
+
+// ── Enums ────────────────────────────────────────────────────────────────
+
+enum TerritoryType {
+  EXCLUSIVE    // Only one owner — highest value
+  SHARED       // Multiple owners can share (up to maxOwners)
+  AUCTION      // Currently being auctioned to highest bidder
+  MARKETPLACE  // Available for purchase, no current owner
+}
+
+enum TerritoryStatus {
+  ACTIVE
+  SUSPENDED
+  PENDING_PAYMENT
+  EXPIRED
+}
+
+enum AssignmentStatus {
+  ASSIGNED      // Lead assigned to territory owner
+  ACCEPTED      // Owner acknowledged the lead
+  WORKING       // Owner actively working the lead
+  CONVERTED     // Lead became a client
+  REJECTED      // Owner rejected the lead (refund eligible)
+  EXPIRED       // Not acted on within TTL
+  UNASSIGNED    // No territory found — goes to marketplace
+}
+
+enum NotificationType {
+  LEAD_ASSIGNED          // New lead in your territory
+  TERRITORY_PURCHASED    // You bought a territory
+  TERRITORY_EXPIRING     // Territory renewal coming up
+  LEAD_REJECTED          // Owner rejected, alert admin
+  NEW_AVAILABLE_TERRITORY // New territory up for sale
+  ASSIGNMENT_EXPIRED      // Lead expired unworked
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  READ
+  FAILED
+}
+
+enum NotificationChannel {
+  EMAIL
+  DASHBOARD
+  SMS
+  WEBHOOK
+}
+
+// ── Territories ──────────────────────────────────────────────────────────
+
+model Territory {
+  id           String          @id @default(uuid())
+
+  // Geography
+  zipCode      String?         @map("zip_code")       // primary targeting method
+  city         String?                                // city-level territory
+  county       String?
+  stateCode    String          @map("state_code")
+  displayName  String          @map("display_name")   // "Arlington, VA 22201"
+
+  // Territory config
+  type         TerritoryType   @default(EXCLUSIVE)
+  status       TerritoryStatus @default(ACTIVE)
+  maxOwners    Int             @default(1)             @map("max_owners")
+
+  // Monetization
+  monthlyPrice  Decimal?       @db.Decimal(10,2)       @map("monthly_price")
+  setupFee      Decimal?       @db.Decimal(10,2)       @map("setup_fee")
+  leadsPerMonth Int?           @map("leads_per_month") // expected volume
+
+  // Metadata
+  description  String?
+  notes        String?
+  isActive     Boolean         @default(true)          @map("is_active")
+  priority     Int             @default(0)             // higher = better territory
+
+  // Stats (denormalized for performance)
+  totalLeads   Int             @default(0)             @map("total_leads")
+  totalAssigned Int            @default(0)             @map("total_assigned")
+  conversionRate Decimal?      @db.Decimal(5,4)        @map("conversion_rate")
+
+  // Relations
+  ownerships   TerritoryOwnership[]
+  assignments  LeadAssignment[]
+
+  createdAt    DateTime        @default(now())         @map("created_at")
+  updatedAt    DateTime        @updatedAt              @map("updated_at")
+
+  @@unique([zipCode, stateCode])
+  @@index([zipCode])
+  @@index([stateCode])
+  @@index([status, isActive])
+  @@index([type])
+  @@map("territories")
+}
+
+// ── Territory Ownership ──────────────────────────────────────────────────
+
+model TerritoryOwnership {
+  id            String          @id @default(uuid())
+  territoryId   String          @map("territory_id")
+  territory     Territory       @relation(fields: [territoryId], references: [id], onDelete: Cascade)
+  userId        String          @map("user_id")
+  user          User            @relation("TerritoryOwnerships", fields: [userId], references: [id])
+
+  // Billing
+  startDate     DateTime        @map("start_date")
+  endDate       DateTime?       @map("end_date")          // null = no expiry
+  monthlyFee    Decimal?        @db.Decimal(10,2)         @map("monthly_fee")
+  isActive      Boolean         @default(true)            @map("is_active")
+  autoRenew     Boolean         @default(true)            @map("auto_renew")
+  paymentRef    String?         @map("payment_ref")       // Stripe subscription ID etc.
+
+  // Distribution settings
+  leadNotifyEmail    Boolean    @default(true)            @map("lead_notify_email")
+  leadNotifySms      Boolean    @default(false)           @map("lead_notify_sms")
+  leadNotifyDashboard Boolean   @default(true)            @map("lead_notify_dashboard")
+  webhookUrl         String?    @map("webhook_url")
+
+  // Stats
+  leadsReceived  Int            @default(0)               @map("leads_received")
+  leadsConverted Int            @default(0)               @map("leads_converted")
+
+  assignedLeads  LeadAssignment[]
+
+  createdAt     DateTime        @default(now())           @map("created_at")
+  updatedAt     DateTime        @updatedAt                @map("updated_at")
+
+  @@unique([territoryId, userId])
+  @@index([userId])
+  @@index([isActive])
+  @@index([endDate])
+  @@map("territory_ownerships")
+}
+
+// ── Lead Assignment ──────────────────────────────────────────────────────
+
+model LeadAssignment {
+  id              String           @id @default(uuid())
+  leadId          String           @map("lead_id")
+  lead            Lead             @relation("LeadAssignments", fields: [leadId], references: [id])
+  territoryId     String?          @map("territory_id")
+  territory       Territory?       @relation(fields: [territoryId], references: [id])
+  ownershipId     String?          @map("ownership_id")
+  ownership       TerritoryOwnership? @relation(fields: [ownershipId], references: [id])
+  assignedToId    String?          @map("assigned_to_id")  // direct user ref
+  assignedTo      User?            @relation("ReceivedAssignments", fields: [assignedToId], references: [id])
+
+  // Assignment metadata
+  status          AssignmentStatus @default(ASSIGNED)
+  assignedAt      DateTime         @default(now())         @map("assigned_at")
+  acceptedAt      DateTime?        @map("accepted_at")
+  rejectedAt      DateTime?        @map("rejected_at")
+  rejectionReason String?          @map("rejection_reason")
+  expiresAt       DateTime?        @map("expires_at")      // auto-reject TTL
+
+  // Attribution
+  assignmentMethod String          @default("auto_territory") @map("assignment_method")
+  // "auto_territory" | "manual_admin" | "round_robin" | "marketplace"
+
+  notes           String?
+
+  // Notification tracking
+  notifications   AssignmentNotification[]
+
+  createdAt       DateTime         @default(now())         @map("created_at")
+  updatedAt       DateTime         @updatedAt              @map("updated_at")
+
+  @@index([leadId])
+  @@index([territoryId])
+  @@index([assignedToId])
+  @@index([status])
+  @@index([assignedAt])
+  @@index([expiresAt])
+  @@map("lead_assignments")
+}
+
+// ── Notifications ────────────────────────────────────────────────────────
+
+model AssignmentNotification {
+  id             String               @id @default(uuid())
+  assignmentId   String               @map("assignment_id")
+  assignment     LeadAssignment       @relation(fields: [assignmentId], references: [id])
+  userId         String               @map("user_id")
+  user           User                 @relation("ReceivedNotifications", fields: [userId], references: [id])
+
+  type           NotificationType
+  channel        NotificationChannel
+  status         NotificationStatus   @default(PENDING)
+
+  // Content
+  subject        String?
+  body           String?              @db.Text
+  metadata       Json                 @default("{}")       // email HTML, SMS params etc.
+
+  // Delivery
+  sentAt         DateTime?            @map("sent_at")
+  readAt         DateTime?            @map("read_at")
+  error          String?
+
+  createdAt      DateTime             @default(now())      @map("created_at")
+
+  @@index([userId, status])
+  @@index([assignmentId])
+  @@index([channel, status])
+  @@map("assignment_notifications")
+}
+
+// ── Territory Audit Log ──────────────────────────────────────────────────
+
+model TerritoryAuditLog {
+  id           String   @id @default(uuid())
+  territoryId  String   @map("territory_id")
+  userId       String?  @map("user_id")         // who triggered the action
+  action       String                            // "ownership_created", "lead_assigned", etc.
+  before       Json?
+  after        Json?
+  meta         Json?    @default("{}")
+  createdAt    DateTime @default(now())          @map("created_at")
+
+  @@index([territoryId])
+  @@index([createdAt])
+  @@map("territory_audit_log")
+}
