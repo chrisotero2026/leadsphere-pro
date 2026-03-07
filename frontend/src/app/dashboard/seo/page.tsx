@@ -1,4 +1,7 @@
 'use client';
+
+export const dynamic = 'force-dynamic';
+
 // src/app/dashboard/seo/page.tsx
 
 import { useState } from 'react';
