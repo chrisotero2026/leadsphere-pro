@@ -1,17 +1,8 @@
 {
   "name": "leadsphere-pro",
   "version": "1.0.0",
-  "description": "AI-powered Real Estate CRM Platform",
-  "type": "module",
   "scripts": {
-    "dev": "concurrently \"npm --prefix backend run dev\" \"npm --prefix frontend run dev\"",
-    "build": "npm --prefix backend run build && npm --prefix frontend run build",
-    "start": "npm --prefix backend start",
-    "install-all": "npm install && npm --prefix backend install && npm --prefix frontend install",
-    "db:push": "npm --prefix backend run db:push",
-    "db:migrate": "npm --prefix backend run db:migrate"
-  },
-  "dependencies": {
-    "concurrently": "^8.2.2"
+    "build": "cd backend && npm install && npx prisma generate && tsc",
+    "start": "cd backend && node dist/index.js"
   }
 }
