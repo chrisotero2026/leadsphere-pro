@@ -42,6 +42,7 @@ interface Territory {
     leadsConverted: number;
     user: { id: string; firstName: string; lastName: string; email: string };
   }>;
+  maxOwners?: number;
   _count: { assignments: number };
 }
 
@@ -251,11 +252,11 @@ function TerritoryCard({
               className="flex-1 py-2 bg-[#1B3A5C] text-white text-xs font-bold rounded-lg hover:bg-[#24527a] flex items-center justify-center gap-1.5">
               <Plus className="w-3.5 h-3.5"/> Assign Owner
             </button>
-          ) : territory.type === 'SHARED' && activeOwners.length < territory.maxOwners ? (
+          ) : territory.type === 'SHARED' && activeOwners.length < (territory as any).maxOwners ? (
             <button
               onClick={() => onAssign(territory)}
               className="flex-1 py-2 border border-[#1B3A5C] text-[#1B3A5C] text-xs font-bold rounded-lg hover:bg-[#1B3A5C]/5 flex items-center justify-center gap-1.5">
-              <Plus className="w-3.5 h-3.5"/> Add Co-owner ({activeOwners.length}/{territory.maxOwners})
+              <Plus className="w-3.5 h-3.5"/> Add Co-owner ({activeOwners.length}/{(territory as any).maxOwners})
             </button>
           ) : (
             <div className="flex-1 py-2 bg-gray-100 text-gray-400 text-xs font-medium rounded-lg text-center">
