@@ -1,8 +1,8 @@
 [phases.install]
-cmds = ["npm install"]
+cmds = ["cd backend && npm install"]
 
 [phases.build]
-cmds = ["npx prisma generate && npx tsc"]
+cmds = ["cd backend && npx prisma generate && npx tsc"]
 
 [start]
-cmd = "npx prisma db push && node dist/index.js"
+cmd = "cd backend && npx prisma db push && node dist/index.js"
