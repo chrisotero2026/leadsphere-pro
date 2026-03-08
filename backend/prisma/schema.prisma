@@ -1,10 +1,89 @@
-// LeadSphere Pro — Schema Unificado (MVP + AI + Billing + Territory + SEO)
+// LeadSphere Pro — Prisma Schema
 generator client {
   provider = "prisma-client-js"
 }
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+// ═══════════════════════ ENUMS ═══════════════════════
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  PROPOSAL
+  NEGOTIATION
+  CLOSED_WON
+  CLOSED_LOST
+}
+
+enum PropertyType {
+  SINGLE_FAMILY
+  MULTI_FAMILY
+  CONDO
+  TOWNHOUSE
+  LAND
+  COMMERCIAL
+}
+
+enum Urgency {
+  IMMEDIATE
+  THREE_MONTHS
+  SIX_MONTHS
+  EXPLORING
+}
+
+enum Temperature {
+  HOT
+  WARM
+  COLD
+}
+
+enum ActivityType {
+  NOTE
+  CALL
+  EMAIL
+  MEETING
+  SMS
+  STATUS_CHANGE
+}
+
+enum ServiceType {
+  SELL_HOUSE_FAST
+  CASH_OFFER
+  FORECLOSURE
+  PROBATE
+  DIVORCE_SALE
+  FIRST_TIME_BUYER
+  REFINANCE
+  INVESTMENT_PROPERTY
+}
+
+enum PageStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum MarketplaceListingType {
+  TERRITORY
+  LEAD_PACKAGE
+  CUSTOM
+}
+
+enum MarketplaceListingStatus {
+  ACTIVE
+  INACTIVE
+  SOLD
 }
 
 // ═══════════════════════ CORE ═══════════════════════
@@ -21,30 +100,31 @@ model Role {
 }
 
 model User {
-  id          String     @id @default(uuid())
-  email       String     @unique
-  password    String
-  firstName   String     @map("first_name")
-  lastName    String     @map("last_name")
-  phone       String?
-  avatar      String?
-  roleId      String     @map("role_id")
-  role        Role       @relation(fields: [roleId], references: [id])
-  status      UserStatus @default(ACTIVE)
-  lastLoginAt DateTime?  @map("last_login_at")
-  stripeCustomerId String? @map("stripe_customer_id")
-  assignedLeads  LeadAssignment[] @relation("AssignedTo")
-  createdLeads   Lead[]           @relation("CreatedBy")
-  activities     CrmActivity[]
-  territories    Territory[]
-  subscriptions  Subscription[]
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+  id               String     @id @default(uuid())
+  email            String     @unique
+  password         String
+  firstName        String     @map("first_name")
+  lastName         String     @map("last_name")
+  phone            String?
+  avatar           String?
+  roleId           String     @map("role_id")
+  role             Role       @relation(fields: [roleId], references: [id])
+  status           UserStatus @default(ACTIVE)
+  lastLoginAt      DateTime?  @map("last_login_at")
+  stripeCustomerId String?    @map("stripe_customer_id")
+  assignedLeads    LeadAssignment[] @relation("AssignedTo")
+  createdLeads     Lead[]           @relation("CreatedBy")
+  activities       CrmActivity[]
+  territories      Territory[]
+  subscriptions    Subscription[]
+  payments         Payment[]
+  metrics          AgentPerformanceMetric[]
+  ownerships       TerritoryOwnership[]
+  createdAt        DateTime   @default(now()) @map("created_at")
+  updatedAt        DateTime   @updatedAt @map("updated_at")
   @@index([email])
   @@map("users")
 }
-
-enum UserStatus { ACTIVE INACTIVE SUSPENDED }
 
 model Lead {
   id             String        @id @default(uuid())
@@ -56,8 +136,8 @@ model Lead {
   city           String?
   state          String?       @default("VA")
   zipCode        String?       @map("zip_code")
-  propertyType   PropertyType? @map("property_type")
-  estimatedValue Decimal?      @map("estimated_value") @db.Decimal(12, 2)
+  propertyType   PropertyType?
+  estimatedValue Decimal?      @db.Decimal(12, 2)
   urgency        Urgency?
   score          Int           @default(0)
   temperature    Temperature   @default(COLD)
@@ -72,19 +152,15 @@ model Lead {
   tags           LeadTag[]
   aiScores       AiLeadScore[]
   followUpSeqs   FollowUpSequence[]
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  scoreHistory   LeadScoreHistory[]
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
   @@index([email])
   @@index([zipCode])
   @@index([status])
   @@index([score])
   @@map("leads")
 }
-
-enum LeadStatus   { NEW CONTACTED QUALIFIED PROPOSAL NEGOTIATION CLOSED_WON CLOSED_LOST }
-enum PropertyType { SINGLE_FAMILY MULTI_FAMILY CONDO TOWNHOUSE LAND COMMERCIAL }
-enum Urgency      { IMMEDIATE THREE_MONTHS SIX_MONTHS EXPLORING }
-enum Temperature  { HOT WARM COLD }
 
 model LeadAssignment {
   id         String   @id @default(uuid())
@@ -117,8 +193,6 @@ model CrmActivity {
   @@map("crm_activities")
 }
 
-enum ActivityType { NOTE CALL EMAIL MEETING SMS STATUS_CHANGE }
-
 model Tag {
   id    String    @id @default(uuid())
   name  String    @unique
@@ -139,54 +213,99 @@ model LeadTag {
 // ═══════════════════════ AI MODULE ══════════════════════
 
 model AiLeadScore {
-  id                String    @id @default(uuid())
-  leadId            String    @map("lead_id")
-  lead              Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  totalScore        Int       @map("total_score")
-  temperature       Temperature
-  urgencyScore      Int       @default(0) @map("urgency_score")
-  budgetScore       Int       @default(0) @map("budget_score")
-  intentScore       Int       @default(0) @map("intent_score")
-  engagementScore   Int       @default(0) @map("engagement_score")
-  creditScore       Int       @default(0) @map("credit_score")
-  timelineScore     Int       @default(0) @map("timeline_score")
-  summary           String?
-  recommendations   Json      @default("[]")
-  closeProbability  Decimal?  @map("close_probability") @db.Decimal(5,4)
-  estimatedValue    Decimal?  @map("estimated_value") @db.Decimal(12,2)
-  scoredAt          DateTime  @default(now()) @map("scored_at")
-  modelUsed         String?   @map("model_used")
-  processingMs      Int?      @map("processing_ms")
+  id               String      @id @default(uuid())
+  leadId           String      @unique @map("lead_id")
+  lead             Lead        @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  totalScore       Int         @map("total_score")
+  temperature      Temperature
+  urgencyScore     Int         @default(0) @map("urgency_score")
+  budgetScore      Int         @default(0) @map("budget_score")
+  intentScore      Int         @default(0) @map("intent_score")
+  engagementScore  Int         @default(0) @map("engagement_score")
+  creditScore      Int         @default(0) @map("credit_score")
+  timelineScore    Int         @default(0) @map("timeline_score")
+  summary          String?
+  strengths        Json        @default("[]")
+  risks            Json        @default("[]")
+  recommendations  Json        @default("[]")
+  callScript       String?
+  objectionHandlers Json       @default("{}")
+  productMatch     String?
+  programMatch     String?
+  closeProbability Decimal?    @db.Decimal(5, 4)
+  estimatedDaysToClose Int?
+  estimatedRevenue Decimal?    @db.Decimal(12, 2)
+  tokensUsed       Int?
+  scoreVersion     Int         @default(1)
+  lastScored       DateTime    @default(now()) @map("last_scored")
   @@index([leadId])
   @@index([totalScore])
   @@map("ai_lead_scores")
 }
 
+model LeadScoreHistory {
+  id          String      @id @default(uuid())
+  leadId      String      @map("lead_id")
+  lead        Lead        @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  totalScore  Int
+  temperature Temperature
+  trigger     String
+  delta       Int?
+  snapshot    Json        @default("{}")
+  createdAt   DateTime    @default(now()) @map("created_at")
+  @@index([leadId])
+  @@map("lead_score_history")
+}
+
 model FollowUpSequence {
-  id          String    @id @default(uuid())
-  leadId      String    @map("lead_id")
-  lead        Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  id          String   @id @default(uuid())
+  leadId      String   @map("lead_id")
+  lead        Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
   channel     String
-  status      String    @default("active")
-  steps       Json      @default("[]")
-  currentStep Int       @default(0) @map("current_step")
+  status      String   @default("active")
+  steps       Json     @default("[]")
+  currentStep Int      @default(0) @map("current_step")
   nextRunAt   DateTime? @map("next_run_at")
   completedAt DateTime? @map("completed_at")
-  createdAt   DateTime  @default(now()) @map("created_at")
+  createdAt   DateTime @default(now()) @map("created_at")
   @@index([leadId])
   @@map("follow_up_sequences")
 }
 
 model AiInsight {
-  id        String   @id @default(uuid())
-  type      String
-  priority  String   @default("medium")
-  title     String
-  message   String
-  data      Json     @default("{}")
-  isRead    Boolean  @default(false) @map("is_read")
-  createdAt DateTime @default(now()) @map("created_at")
+  id          String   @id @default(uuid())
+  type        String
+  severity    String   @default("INFO")
+  title       String
+  body        String
+  entityType  String?
+  entityId    String?
+  actionUrl   String?
+  actionLabel String?
+  isRead      Boolean  @default(false) @map("is_read")
+  expiresAt   DateTime?
+  createdAt   DateTime @default(now()) @map("created_at")
   @@map("ai_insights")
+}
+
+model AgentPerformanceMetric {
+  id               String   @id @default(uuid())
+  agentId          String   @map("agent_id")
+  agent            User     @relation(fields: [agentId], references: [id])
+  periodStart      DateTime @map("period_start")
+  periodEnd        DateTime @map("period_end")
+  leadsAssigned    Int      @default(0)
+  leadsAccepted    Int      @default(0)
+  leadsConverted   Int      @default(0)
+  leadsRejected    Int      @default(0)
+  avgResponseHours Decimal? @db.Decimal(5, 2)
+  avgLeadScore     Decimal? @db.Decimal(5, 2)
+  conversionRate   Decimal? @db.Decimal(5, 4)
+  acceptanceRate   Decimal? @db.Decimal(5, 4)
+  estimatedRevenue Decimal? @db.Decimal(12, 2)
+  createdAt        DateTime @default(now()) @map("created_at")
+  @@index([agentId])
+  @@map("agent_performance_metrics")
 }
 
 // ═════════════════════ BILLING MODULE ════════════════════
@@ -195,61 +314,128 @@ model Plan {
   id            String   @id
   name          String
   displayName   String   @map("display_name")
-  price         Decimal  @db.Decimal(10,2)
+  tier          String
+  price         Decimal  @db.Decimal(10, 2)
+  annualPrice   Decimal? @db.Decimal(10, 2)
   stripePriceId String?  @map("stripe_price_id")
-  features      Json     @default("{}")
-  limits        Json     @default("{}")
+  config        Json     @default("{}")
   isActive      Boolean  @default(true) @map("is_active")
   subscriptions Subscription[]
   @@map("plans")
 }
 
 model Subscription {
-  id                   String    @id @default(uuid())
-  userId               String    @map("user_id")
-  user                 User      @relation(fields: [userId], references: [id])
-  planId               String    @map("plan_id")
-  plan                 Plan      @relation(fields: [planId], references: [id])
-  stripeSubscriptionId String?   @unique @map("stripe_subscription_id")
-  status               String    @default("active")
+  id                   String   @id @default(uuid())
+  userId               String   @map("user_id")
+  user                 User     @relation(fields: [userId], references: [id])
+  planId               String   @map("plan_id")
+  plan                 Plan     @relation(fields: [planId], references: [id])
+  stripeSubscriptionId String?  @unique @map("stripe_subscription_id")
+  status               String   @default("active")
   currentPeriodStart   DateTime? @map("current_period_start")
   currentPeriodEnd     DateTime? @map("current_period_end")
-  cancelAtPeriodEnd    Boolean   @default(false) @map("cancel_at_period_end")
-  createdAt            DateTime  @default(now()) @map("created_at")
-  updatedAt            DateTime  @updatedAt @map("updated_at")
+  cancelAtPeriodEnd    Boolean  @default(false) @map("cancel_at_period_end")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
   @@index([userId])
   @@map("subscriptions")
 }
 
-model TerritoryListing {
-  id           String   @id @default(uuid())
-  zipCode      String   @unique @map("zip_code")
-  city         String
-  state        String
-  tier         String
-  price        Decimal  @db.Decimal(10,2)
-  monthlyPrice Decimal  @map("monthly_price") @db.Decimal(10,2)
-  isAvailable  Boolean  @default(true) @map("is_available")
-  ownerId      String?  @map("owner_id")
-  createdAt    DateTime @default(now()) @map("created_at")
-  @@map("territory_listings")
+model Payment {
+  id               String   @id @default(uuid())
+  userId           String   @map("user_id")
+  user             User     @relation(fields: [userId], references: [id])
+  subscriptionId   String?  @map("subscription_id")
+  stripePaymentId  String?  @unique @map("stripe_payment_id")
+  amount           Decimal  @db.Decimal(10, 2)
+  currency         String   @default("usd")
+  status           String   @default("pending")
+  refundedAmount   Decimal? @db.Decimal(10, 2)
+  refundReason     String?
+  invoice          Invoice?
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  @@index([userId])
+  @@map("payments")
+}
+
+model Invoice {
+  id               String   @id @default(uuid())
+  subscriptionId   String?  @map("subscription_id")
+  paymentId        String?  @unique @map("payment_id")
+  payment          Payment? @relation(fields: [paymentId], references: [id])
+  userId           String   @map("user_id")
+  stripeInvoiceId  String?  @unique @map("stripe_invoice_id")
+  invoiceNumber    String   @unique @map("invoice_number")
+  subtotal         Decimal  @db.Decimal(10, 2)
+  tax              Decimal  @default(0) @db.Decimal(10, 2)
+  total            Decimal  @db.Decimal(10, 2)
+  currency         String   @default("usd")
+  status           String   @default("open")
+  dueDate          DateTime? @map("due_date")
+  paidAt           DateTime? @map("paid_at")
+  lineItems        Json     @default("[]")
+  billingDetails   Json     @default("{}")
+  invoicePdfUrl    String?
+  periodStart      DateTime? @map("period_start")
+  periodEnd        DateTime? @map("period_end")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  @@index([userId])
+  @@map("invoices")
+}
+
+model UsageRecord {
+  id             String   @id @default(uuid())
+  subscriptionId String   @map("subscription_id")
+  userId         String   @map("user_id")
+  metric         String
+  quantity       Int
+  periodStart    DateTime @map("period_start")
+  periodEnd      DateTime @map("period_end")
+  createdAt      DateTime @default(now()) @map("created_at")
+  @@index([subscriptionId])
+  @@map("usage_records")
 }
 
 // ════════════════════ TERRITORY MODULE ═══════════════════
 
 model Territory {
-  id          String    @id @default(uuid())
-  zipCode     String    @map("zip_code")
+  id          String   @id @default(uuid())
+  zipCode     String   @map("zip_code")
   city        String
-  state       String    @default("VA")
-  userId      String    @map("user_id")
-  user        User      @relation(fields: [userId], references: [id])
-  isActive    Boolean   @default(true) @map("is_active")
-  assignedAt  DateTime  @default(now()) @map("assigned_at")
+  county      String?
+  state       String   @default("VA")
+  stateCode   String   @map("state_code")
+  displayName String   @map("display_name")
+  type        String   @default("EXCLUSIVE")
+  status      String   @default("ACTIVE")
+  userId      String?  @map("user_id")
+  user        User?    @relation(fields: [userId], references: [id])
+  isActive    Boolean  @default(true) @map("is_active")
+  monthlyPrice Decimal? @db.Decimal(10, 2)
+  leadsPerMonth Int?
+  priority    Int      @default(0)
+  assignedAt  DateTime @default(now()) @map("assigned_at")
   assignments TerritoryAssignment[]
   notifications TerritoryNotification[]
+  ownerships  TerritoryOwnership[]
   @@unique([zipCode, userId])
   @@map("territories")
+}
+
+model TerritoryOwnership {
+  id            String   @id @default(uuid())
+  territoryId   String   @map("territory_id")
+  territory     Territory @relation(fields: [territoryId], references: [id])
+  userId        String   @map("user_id")
+  user          User     @relation(fields: [userId], references: [id])
+  isActive      Boolean  @default(true) @map("is_active")
+  leadsReceived Int      @default(0)
+  startDate     DateTime @default(now()) @map("start_date")
+  endDate       DateTime? @map("end_date")
+  @@unique([territoryId, userId])
+  @@map("territory_ownerships")
 }
 
 model TerritoryAssignment {
@@ -275,39 +461,77 @@ model TerritoryNotification {
 // ══════════════════════ SEO MODULE ═══════════════════════
 
 model SeoTemplate {
-  id        String    @id @default(uuid())
-  name      String
-  type      String
-  content   Json
-  isDefault Boolean   @default(false) @map("is_default")
-  pages     SeoPage[]
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
+  id                      String      @id @default(uuid())
+  name                    String
+  slug                    String      @unique
+  serviceType             ServiceType
+  description             String?
+  titleTemplate           String
+  metaDescTemplate        String
+  h1Template              String
+  heroHeadlineTemplate    String
+  heroSubheadlineTemplate String
+  bodyTemplate            String      @db.Text
+  faqTemplate             Json        @default("[]")
+  ctaText                 String      @default("Get My Cash Offer")
+  ctaSubtext              String?
+  aiEnabled               Boolean     @default(true)
+  aiPromptAdditions       String?
+  isActive                Boolean     @default(true)
+  pages                   SeoPage[]
+  createdAt               DateTime    @default(now()) @map("created_at")
+  updatedAt               DateTime    @updatedAt @map("updated_at")
+  @@index([serviceType])
   @@map("seo_templates")
 }
 
+model Location {
+  id              String   @id @default(uuid())
+  zipCode         String   @unique @map("zip_code")
+  city            String
+  county          String?
+  state           String
+  stateCode       String   @map("state_code")
+  latitude        Decimal? @db.Decimal(9, 6)
+  longitude       Decimal? @db.Decimal(9, 6)
+  population      Int?
+  medianIncome    Int?     @map("median_income")
+  medianHomeValue Int?     @map("median_home_value")
+  isActive        Boolean  @default(true) @map("is_active")
+  priority        Int      @default(0)
+  pages           SeoPage[]
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  @@index([stateCode])
+  @@index([isActive, priority])
+  @@map("locations")
+}
+
 model SeoPage {
-  id          String       @id @default(uuid())
-  slug        String       @unique
+  id          String      @id @default(uuid())
+  templateId  String      @map("template_id")
+  template    SeoTemplate @relation(fields: [templateId], references: [id])
+  locationId  String      @map("location_id")
+  location    Location    @relation(fields: [locationId], references: [id])
+  fullPath    String      @unique @map("full_path")
   title       String
-  metaDesc    String       @map("meta_desc")
-  city        String
-  state       String
-  zipCode     String?      @map("zip_code")
-  content     Json
-  isPublished Boolean      @default(false) @map("is_published")
-  templateId  String?      @map("template_id")
-  template    SeoTemplate? @relation(fields: [templateId], references: [id])
+  metaDesc    String      @map("meta_desc")
+  content     String      @db.Text
+  status      PageStatus  @default(DRAFT)
+  viewCount   Int         @default(0)
   leads       SeoPageLead[]
-  createdAt   DateTime     @default(now()) @map("created_at")
-  updatedAt   DateTime     @updatedAt @map("updated_at")
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+  @@index([templateId])
+  @@index([locationId])
+  @@index([status])
   @@map("seo_pages")
 }
 
 model SeoPageLead {
   id        String   @id @default(uuid())
   pageId    String   @map("page_id")
-  page      SeoPage  @relation(fields: [pageId], references: [id])
+  page      SeoPage  @relation(fields: [pageId], references: [id], onDelete: Cascade)
   name      String
   email     String
   phone     String?
@@ -326,4 +550,28 @@ model SeoJob {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
   @@map("seo_jobs")
+}
+
+// ══════════════════ MARKETPLACE MODULE ══════════════════
+
+model MarketplaceListing {
+  id             String                   @id @default(uuid())
+  type           MarketplaceListingType
+  status         MarketplaceListingStatus @default(ACTIVE)
+  sellerId       String?                  @map("seller_id")
+  territoryId    String?                  @map("territory_id")
+  title          String
+  description    String?
+  highlights     Json                     @default("[]")
+  price          Decimal                  @db.Decimal(10, 2)
+  isRecurring    Boolean                  @default(false)
+  recurringPrice Decimal?                 @db.Decimal(10, 2)
+  leadsPerMonth  Int?
+  medianValue    String?
+  viewCount      Int                      @default(0)
+  createdAt      DateTime                 @default(now()) @map("created_at")
+  updatedAt      DateTime                 @updatedAt @map("updated_at")
+  @@index([type])
+  @@index([status])
+  @@map("marketplace_listings")
 }
