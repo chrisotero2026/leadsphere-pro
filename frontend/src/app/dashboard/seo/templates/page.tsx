@@ -1,4 +1,5 @@
 'use client';
+export const dynamic = 'force-dynamic';
 // src/app/dashboard/seo/templates/page.tsx
 
 import { useState } from 'react';
@@ -117,7 +118,7 @@ export default function TemplatesPage() {
                   </span>
                 </div>
                 {t.aiEnabled && (
-                  <Bot className="w-4 h-4 text-violet-400 flex-shrink-0 mt-0.5" title="AI enabled"/>
+                  <Bot className="w-4 h-4 text-violet-400 flex-shrink-0 mt-0.5" />
                 )}
               </div>
 
