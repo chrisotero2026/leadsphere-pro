@@ -2,7 +2,7 @@
 cmds = ["npm install"]
 
 [phases.build]
-cmds = ["npx prisma generate && npx tsc"]
+cmds = ["npx prisma generate && npx tsc && npx prisma db push --schema=./prisma/schema.prisma && npx tsx src/utils/seed.ts"]
 
 [start]
-cmd = "npx prisma db push --schema=./prisma/schema.prisma && node dist/index.js"
+cmd = "node dist/index.js"
