@@ -14,19 +14,12 @@ import { statsRouter }      from './routes/stats.routes';
 // Feature routes
 import { aiRouter }         from './routes/ai.routes';
 import { billingRouter }    from './routes/billing.routes';
-import { territoryRouter }  from './routes/territory.routes';
-import { seoRouter }        from './routes/seo.routes';
-// Webhooks
-import { stripeWebhookHandler } from './webhooks/stripeWebhook.handler';
 // Middleware
 import { errorHandler } from './middleware/error.middleware';
 import { notFound }     from './middleware/notFound.middleware';
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
-
-// ── Stripe webhook needs raw body ─────────────────────────────
-app.post('/webhooks/stripe', express.raw({ type: 'application/json' }), stripeWebhookHandler);
 
 // ── Security ──────────────────────────────────────────────────
 app.use(helmet());
@@ -64,8 +57,6 @@ app.use('/api/v1/activities',  activitiesRouter);
 app.use('/api/v1/stats',       statsRouter);
 app.use('/api/v1/ai',          aiRouter);
 app.use('/api/v1/billing',     billingRouter);
-app.use('/api/v1/territories', territoryRouter);
-app.use('/api/v1/seo',         seoRouter);
 
 // ── Error handling ────────────────────────────────────────────
 app.use(notFound);

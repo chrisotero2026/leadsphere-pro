@@ -44,8 +44,12 @@ export const createActivity = async (req: AuthRequest, res: Response, next: Next
 
     const activity = await prisma.crmActivity.create({
       data: {
-        ...data,
+        leadId: data.leadId,
         userId: req.user!.userId,
+        type: data.type,
+        subject: data.subject,
+        body: data.body,
+        outcome: data.outcome,
         scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : undefined,
         completedAt: data.completedAt ? new Date(data.completedAt) : undefined,
       },

@@ -1,265 +1,187 @@
 /**
  * assignments.controller.ts
- * Lead assignment management — view, accept, reject, reassign
+ * Simplified lead assignment endpoints
  */
 
 import { Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { PrismaClient, AssignmentStatus } from '@prisma/client';
+import { prisma } from '../config/prisma';
+import { sendSuccess, sendError } from '../utils/response';
 import { AuthRequest } from '../middleware/auth.middleware';
-import { sendSuccess, sendError, sendPaginated } from '../utils/response';
-import {
-  distributeLeadToTerritory,
-  reassignLead,
-  getDistributionStats,
-} from '../services/territoryDistribution.service';
 
-const prisma = new PrismaClient();
+const createAssignmentSchema = z.object({
+  leadId: z.string().uuid(),
+  userId: z.string().uuid(),
+  notes: z.string().optional(),
+});
 
-// ─── List assignments ─────────────────────────────────────────────────
+const updateAssignmentSchema = z.object({
+  notes: z.string().optional(),
+  isActive: z.boolean().optional(),
+});
+
+// ── Get all assignments ────────────────────────────────────────────
 
 export const getAssignments = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const page   = Math.max(1, parseInt(req.query.page  as string) || 1);
-    const limit  = Math.min(100, parseInt(req.query.limit as string) || 25);
-    const status = req.query.status    as string;
-    const userId = req.query.userId    as string;
-    const isAdmin = ['admin','manager'].includes(req.user!.role ?? '');
-
+    const { leadId, userId } = req.query;
     const where: any = {};
-    if (status) where.status = status;
-    // Non-admins can only see their own assignments
-    if (!isAdmin) {
-      where.assignedToId = req.user!.userId;
-    } else if (userId) {
-      where.assignedToId = userId;
-    }
+    if (leadId) where.leadId = leadId;
+    if (userId) where.userId = userId;
 
-    const [rows, total] = await Promise.all([
-      prisma.leadAssignment.findMany({
-        where,
-        skip:    (page - 1) * limit,
-        take:    limit,
-        orderBy: { assignedAt: 'desc' },
-        include: {
-          lead: {
-            select: {
-              firstName: true, lastName: true, email: true, phone: true,
-              city: true, stateCode: true, zipCode: true,
-              score: true, temperature: true, urgency: true,
-              propertyType: true, estimatedValue: true, createdAt: true,
-            },
-          },
-          territory: { select: { displayName: true, zipCode: true, stateCode: true } },
-          assignedTo: { select: { firstName: true, lastName: true, email: true } },
-        },
-      }),
-      prisma.leadAssignment.count({ where }),
-    ]);
+    const assignments = await prisma.leadAssignment.findMany({
+      where,
+      include: {
+        lead: { select: { id: true, firstName: true, lastName: true, email: true } },
+        user: { select: { id: true, firstName: true, lastName: true, email: true } },
+      },
+      orderBy: { assignedAt: 'desc' },
+    });
 
-    return sendPaginated(res, rows, total, page, limit);
-  } catch (e) { next(e); }
+    return sendSuccess(res, assignments);
+  } catch (error) {
+    next(error);
+  }
 };
 
-// ─── Get single assignment ────────────────────────────────────────────
+// ── Get single assignment ──────────────────────────────────────────
 
-export const getAssignmentById = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const getAssignment = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const a = await prisma.leadAssignment.findUnique({
+    const assignment = await prisma.leadAssignment.findUnique({
       where: { id: req.params.id },
       include: {
-        lead:      true,
-        territory: true,
-        ownership: { include: { user: { select: { firstName: true, lastName: true, email: true } } } },
-        assignedTo:{ select: { firstName: true, lastName: true, email: true } },
-        notifications: { orderBy: { createdAt: 'desc' } },
+        lead: true,
+        user: true,
       },
     });
-    if (!a) return sendError(res, 'Assignment not found', 404);
 
-    // Owners can only see their own
-    if (!['admin','manager'].includes(req.user!.role ?? '') && a.assignedToId !== req.user!.userId) {
-      return sendError(res, 'Not authorized', 403);
-    }
-
-    return sendSuccess(res, a);
-  } catch (e) { next(e); }
+    if (!assignment) return sendError(res, 'Assignment not found', 404);
+    return sendSuccess(res, assignment);
+  } catch (error) {
+    next(error);
+  }
 };
 
-// ─── Accept assignment ────────────────────────────────────────────────
+// ── Create assignment ──────────────────────────────────────────────
 
-export const acceptAssignment = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const createAssignment = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const a = await prisma.leadAssignment.findUnique({ where: { id: req.params.id } });
-    if (!a) return sendError(res, 'Assignment not found', 404);
-    if (a.assignedToId !== req.user!.userId) return sendError(res, 'Not your assignment', 403);
-    if (a.status !== AssignmentStatus.ASSIGNED) return sendError(res, 'Assignment already actioned', 400);
+    const data = createAssignmentSchema.parse(req.body);
 
-    const updated = await prisma.leadAssignment.update({
-      where: { id: req.params.id },
-      data: { status: AssignmentStatus.ACCEPTED, acceptedAt: new Date() },
+    // Check if lead exists
+    const lead = await prisma.lead.findUnique({ where: { id: data.leadId } });
+    if (!lead) return sendError(res, 'Lead not found', 404);
+
+    // Check if user exists
+    const user = await prisma.user.findUnique({ where: { id: data.userId } });
+    if (!user) return sendError(res, 'User not found', 404);
+
+    // Check if assignment already exists
+    const existing = await prisma.leadAssignment.findUnique({
+      where: { leadId_userId: { leadId: data.leadId, userId: data.userId } },
     });
-    return sendSuccess(res, updated, 'Assignment accepted');
-  } catch (e) { next(e); }
-};
 
-// ─── Reject assignment ────────────────────────────────────────────────
-
-export const rejectAssignment = async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const { reason } = z.object({ reason: z.string().optional() }).parse(req.body);
-    const a = await prisma.leadAssignment.findUnique({ where: { id: req.params.id } });
-    if (!a) return sendError(res, 'Assignment not found', 404);
-    if (a.assignedToId !== req.user!.userId && !['admin'].includes(req.user!.role ?? '')) {
-      return sendError(res, 'Not authorized', 403);
+    if (existing) {
+      return sendError(res, 'Lead already assigned to this user', 409);
     }
 
-    const updated = await prisma.leadAssignment.update({
-      where: { id: req.params.id },
+    const assignment = await prisma.leadAssignment.create({
       data: {
-        status:           AssignmentStatus.REJECTED,
-        rejectedAt:       new Date(),
-        rejectionReason:  reason,
+        leadId: data.leadId,
+        userId: data.userId,
+        notes: data.notes,
+      },
+      include: {
+        lead: { select: { id: true, firstName: true, lastName: true } },
+        user: { select: { id: true, firstName: true, lastName: true } },
       },
     });
 
-    // Attempt to re-distribute to next owner
-    if (a.leadId && a.territoryId) {
-      const lead = await prisma.lead.findUnique({ where: { id: a.leadId } });
-      if (lead) {
-        distributeLeadToTerritory({
-          id:        lead.id,
-          zipCode:   lead.zipCode,
-          city:      lead.city,
-          stateCode: lead.state,
-          email:     lead.email,
-          firstName: lead.firstName,
-          lastName:  lead.lastName,
-          score:     lead.score,
-        }).catch(console.error);
+    return sendSuccess(res, assignment, 'Assignment created', 201);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ── Update assignment ──────────────────────────────────────────────
+
+export const updateAssignment = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const data = updateAssignmentSchema.parse(req.body);
+
+    const assignment = await prisma.leadAssignment.update({
+      where: { id: req.params.id },
+      data,
+      include: {
+        lead: { select: { id: true, firstName: true, lastName: true } },
+        user: { select: { id: true, firstName: true, lastName: true } },
+      },
+    });
+
+    return sendSuccess(res, assignment, 'Assignment updated');
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ── Delete assignment ──────────────────────────────────────────────
+
+export const deleteAssignment = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const assignment = await prisma.leadAssignment.findUnique({ where: { id: req.params.id } });
+    if (!assignment) return sendError(res, 'Assignment not found', 404);
+
+    await prisma.leadAssignment.delete({ where: { id: req.params.id } });
+    return sendSuccess(res, null, 'Assignment deleted');
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ── Get assignments for current user ───────────────────────────────
+
+export const getMyAssignments = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const assignments = await prisma.leadAssignment.findMany({
+      where: { userId: req.user!.userId },
+      include: {
+        lead: { select: { id: true, firstName: true, lastName: true, email: true, score: true, temperature: true } },
+      },
+      orderBy: { assignedAt: 'desc' },
+    });
+
+    return sendSuccess(res, assignments);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ── Bulk assign leads ──────────────────────────────────────────────
+
+export const bulkAssignLeads = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { leadIds, userId } = z.object({
+      leadIds: z.array(z.string().uuid()),
+      userId: z.string().uuid(),
+    }).parse(req.body);
+
+    const results = [];
+    for (const leadId of leadIds) {
+      try {
+        const assignment = await prisma.leadAssignment.upsert({
+          where: { leadId_userId: { leadId, userId } },
+          create: { leadId, userId },
+          update: { isActive: true },
+        });
+        results.push({ leadId, success: true, assignment });
+      } catch (err) {
+        results.push({ leadId, success: false, error: String(err) });
       }
     }
 
-    return sendSuccess(res, updated, 'Assignment rejected');
-  } catch (e) { next(e); }
-};
-
-// ─── Mark as working ─────────────────────────────────────────────────
-
-export const markWorking = async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const a = await prisma.leadAssignment.findUnique({ where: { id: req.params.id } });
-    if (!a) return sendError(res, 'Assignment not found', 404);
-    if (a.assignedToId !== req.user!.userId) return sendError(res, 'Not your assignment', 403);
-
-    const updated = await prisma.leadAssignment.update({
-      where: { id: req.params.id },
-      data: { status: AssignmentStatus.WORKING },
-    });
-    return sendSuccess(res, updated, 'Lead marked as in-progress');
-  } catch (e) { next(e); }
-};
-
-// ─── Mark as converted ────────────────────────────────────────────────
-
-export const markConverted = async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const a = await prisma.leadAssignment.findUnique({
-      where: { id: req.params.id },
-      include: { ownership: true },
-    });
-    if (!a) return sendError(res, 'Assignment not found', 404);
-
-    const updated = await prisma.leadAssignment.update({
-      where: { id: req.params.id },
-      data: { status: AssignmentStatus.CONVERTED },
-    });
-
-    // Increment conversion stats
-    if (a.ownershipId) {
-      await prisma.territoryOwnership.update({
-        where: { id: a.ownershipId },
-        data:  { leadsConverted: { increment: 1 } },
-      });
-    }
-
-    return sendSuccess(res, updated, 'Lead marked as converted 🎉');
-  } catch (e) { next(e); }
-};
-
-// ─── Manually redistribute a lead ────────────────────────────────────
-
-export const redistributeLead = async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const { leadId, targetUserId, reason } = z.object({
-      leadId:       z.string().uuid(),
-      targetUserId: z.string().uuid(),
-      reason:       z.string().optional(),
-    }).parse(req.body);
-
-    const result = await reassignLead(leadId, targetUserId, req.user!.userId, reason);
-    return sendSuccess(res, result, 'Lead reassigned');
-  } catch (e) { next(e); }
-};
-
-// ─── Trigger distribution on existing lead ────────────────────────────
-
-export const triggerDistribution = async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const lead = await prisma.lead.findUnique({ where: { id: req.params.leadId } });
-    if (!lead) return sendError(res, 'Lead not found', 404);
-
-    const result = await distributeLeadToTerritory({
-      id:        lead.id,
-      zipCode:   lead.zipCode,
-      city:      lead.city,
-      stateCode: lead.state,
-      email:     lead.email,
-      firstName: lead.firstName,
-      lastName:  lead.lastName,
-      score:     lead.score,
-    });
-
-    return sendSuccess(res, result, result.assigned ? 'Lead distributed' : 'No territory found');
-  } catch (e) { next(e); }
-};
-
-// ─── Distribution stats ───────────────────────────────────────────────
-
-export const getDistributionStatsHandler = async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const stats = await getDistributionStats();
-    return sendSuccess(res, stats);
-  } catch (e) { next(e); }
-};
-
-// ─── Unassigned leads (marketplace) ─────────────────────────────────
-
-export const getUnassignedLeads = async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const page  = Math.max(1, parseInt(req.query.page  as string) || 1);
-    const limit = Math.min(50, parseInt(req.query.limit as string) || 20);
-
-    const [rows, total] = await Promise.all([
-      prisma.leadAssignment.findMany({
-        where: { status: AssignmentStatus.UNASSIGNED },
-        skip:  (page - 1) * limit,
-        take:  limit,
-        orderBy: { assignedAt: 'desc' },
-        include: {
-          lead: {
-            select: {
-              firstName: true, lastName: true,
-              city: true, stateCode: true, zipCode: true,
-              score: true, temperature: true, urgency: true,
-            },
-          },
-          territory: { select: { displayName: true } },
-        },
-      }),
-      prisma.leadAssignment.count({ where: { status: 'UNASSIGNED' } }),
-    ]);
-
-    return sendPaginated(res, rows, total, page, limit);
-  } catch (e) { next(e); }
+    return sendSuccess(res, results, `Assigned ${results.filter(r => r.success).length}/${leadIds.length} leads`);
+  } catch (error) {
+    next(error);
+  }
 };

@@ -108,7 +108,11 @@ export const createUser = async (req: AuthRequest, res: Response, next: NextFunc
 
     const user = await prisma.user.create({
       data: {
-        ...data,
+        email: data.email,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        phone: data.phone,
+        roleId: data.roleId,
         password: await bcrypt.hash(data.password, 12),
       },
       select: {
