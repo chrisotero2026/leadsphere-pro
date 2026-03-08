@@ -1,7 +1,6 @@
 'use client';
 // src/app/plans/page.tsx
-// Public pricing page — no auth required
-
+import { Suspense } from 'react';
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { plansApi, subscriptionApi } from '@/lib/billingApi';
@@ -29,7 +28,6 @@ const PLAN_COLORS: Record<string, string> = {
   ENTERPRISE:   '#7c3aed',
 };
 
-// Feature comparison table rows
 const COMPARISON_FEATURES = [
   { key:'maxTerritories',   label:'Exclusive territories',  format:(v: any) => v === null ? 'Unlimited' : v === 0 ? '—' : v },
   { key:'maxLeadsPerMonth', label:'Leads per month',        format:(v: any) => v === null ? 'Unlimited' : v },
@@ -60,7 +58,7 @@ interface Plan {
   };
 }
 
-export default function PlansPage() {
+function PlansContent() {
   const router = useRouter();
   const params = useSearchParams();
   const [interval, setInterval] = useState<'monthly' | 'annual'>('monthly');
@@ -92,11 +90,10 @@ export default function PlansPage() {
     }
   };
 
-  const annualDiscount = 17; // ~2 months free
+  const annualDiscount = 17;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
-      {/* Hero */}
       <div className="text-center pt-16 pb-12 px-4">
         <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-indigo-100 text-indigo-700 rounded-full text-sm font-semibold mb-6">
           <Zap className="w-3.5 h-3.5"/> Transparent pricing — no hidden fees
@@ -107,8 +104,6 @@ export default function PlansPage() {
         <p className="text-lg text-gray-500 max-w-2xl mx-auto mb-10">
           From independent realtors to large brokerages — every plan includes automatic lead distribution, SEO landing pages, and CRM tools.
         </p>
-
-        {/* Interval toggle */}
         <div className="inline-flex items-center gap-1 bg-gray-100 rounded-xl p-1">
           {(['monthly', 'annual'] as const).map(i => (
             <button key={i} onClick={() => setInterval(i)}
@@ -130,7 +125,6 @@ export default function PlansPage() {
         </div>
       </div>
 
-      {/* Plan cards */}
       {isLoading ? (
         <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-gray-300"/></div>
       ) : (
@@ -142,33 +136,22 @@ export default function PlansPage() {
                 : Number(plan.monthlyPrice).toFixed(0);
               const isPopular = plan.badge === 'Most Popular';
               const color = PLAN_COLORS[plan.tier] ?? plan.color;
-
               return (
                 <div key={plan.id}
                   className={`relative rounded-2xl border-2 overflow-hidden transition-all hover:-translate-y-1 hover:shadow-xl ${
-                    isPopular
-                      ? 'border-[#1B3A5C] shadow-xl shadow-[#1B3A5C]/10'
-                      : 'border-gray-200 shadow-sm'
+                    isPopular ? 'border-[#1B3A5C] shadow-xl shadow-[#1B3A5C]/10' : 'border-gray-200 shadow-sm'
                   }`}>
                   {isPopular && (
                     <div className="bg-[#1B3A5C] text-white text-center py-2 text-xs font-bold tracking-wider uppercase">
                       ⭐ Most Popular
                     </div>
                   )}
-
                   <div className={`p-8 ${isPopular ? 'bg-[#1B3A5C] text-white' : 'bg-white'}`}>
-                    {/* Plan name */}
-                    <div className={`inline-flex items-center justify-center w-12 h-12 rounded-xl mb-4 ${
-                      isPopular ? 'bg-white/20' : 'bg-gray-100'
-                    }`}>
+                    <div className={`inline-flex items-center justify-center w-12 h-12 rounded-xl mb-4 ${isPopular ? 'bg-white/20' : 'bg-gray-100'}`}>
                       <Map className={`w-6 h-6 ${isPopular ? 'text-white' : ''}`} style={{ color: isPopular ? undefined : color }}/>
                     </div>
                     <h2 className="text-xl font-bold mb-1">{plan.name}</h2>
-                    <p className={`text-sm mb-6 ${isPopular ? 'text-blue-200' : 'text-gray-500'}`}>
-                      {plan.config?.description}
-                    </p>
-
-                    {/* Price */}
+                    <p className={`text-sm mb-6 ${isPopular ? 'text-blue-200' : 'text-gray-500'}`}>{plan.config?.description}</p>
                     <div className="mb-6">
                       <div className="flex items-baseline gap-1">
                         <span className="text-lg font-semibold">$</span>
@@ -181,15 +164,9 @@ export default function PlansPage() {
                         </p>
                       )}
                     </div>
-
-                    {/* CTA */}
-                    <button
-                      onClick={() => handleSubscribe(plan.tier)}
-                      disabled={loading === plan.tier}
+                    <button onClick={() => handleSubscribe(plan.tier)} disabled={loading === plan.tier}
                       className={`w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all ${
-                        isPopular
-                          ? 'bg-white text-[#1B3A5C] hover:bg-blue-50'
-                          : 'bg-[#1B3A5C] text-white hover:bg-[#24527a]'
+                        isPopular ? 'bg-white text-[#1B3A5C] hover:bg-blue-50' : 'bg-[#1B3A5C] text-white hover:bg-[#24527a]'
                       } disabled:opacity-70`}>
                       {loading === plan.tier ? (
                         <><Loader2 className="w-4 h-4 animate-spin"/> Processing…</>
@@ -200,8 +177,6 @@ export default function PlansPage() {
                       )}
                     </button>
                   </div>
-
-                  {/* Highlights */}
                   <div className="bg-white border-t border-gray-100 p-8">
                     <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-4">What's included</p>
                     <ul className="space-y-3">
@@ -217,8 +192,6 @@ export default function PlansPage() {
               );
             })}
           </div>
-
-          {/* Free plan mention */}
           {freePlan && (
             <p className="text-center text-sm text-gray-400 mt-6">
               Not ready to commit? Start with our{' '}
@@ -231,10 +204,8 @@ export default function PlansPage() {
         </div>
       )}
 
-      {/* Feature comparison table */}
       <div className="max-w-5xl mx-auto px-4 pb-24">
         <h2 className="text-2xl font-bold text-center text-gray-900 mb-10">Compare all features</h2>
-
         <div className="border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
           <table className="w-full text-sm">
             <thead>
@@ -252,20 +223,15 @@ export default function PlansPage() {
               {COMPARISON_FEATURES.map((f, i) => (
                 <tr key={f.key} className={`border-b border-gray-50 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}>
                   <td className="py-3.5 px-6 font-medium text-gray-700">{f.label}</td>
-                  {/* Free column */}
                   <td className="py-3.5 px-4 text-center text-gray-400">
-                    {f.bool
-                      ? <X className="w-4 h-4 text-gray-300 mx-auto"/>
-                      : f.format?.(0) ?? '—'}
+                    {f.bool ? <X className="w-4 h-4 text-gray-300 mx-auto"/> : f.format?.(0) ?? '—'}
                   </td>
                   {plans.map(p => {
                     const val = p.config?.features?.[f.key];
                     return (
                       <td key={p.id} className="py-3.5 px-4 text-center">
                         {f.bool
-                          ? val
-                            ? <Check className="w-4 h-4 text-emerald-500 mx-auto"/>
-                            : <X className="w-4 h-4 text-gray-300 mx-auto"/>
+                          ? val ? <Check className="w-4 h-4 text-emerald-500 mx-auto"/> : <X className="w-4 h-4 text-gray-300 mx-auto"/>
                           : <span className="font-semibold text-gray-900">{f.format?.(val) ?? val ?? '—'}</span>
                         }
                       </td>
@@ -278,7 +244,6 @@ export default function PlansPage() {
         </div>
       </div>
 
-      {/* FAQ */}
       <div className="max-w-2xl mx-auto px-4 pb-24">
         <h2 className="text-2xl font-bold text-center text-gray-900 mb-8">Frequently asked questions</h2>
         <div className="space-y-4">
@@ -300,5 +265,13 @@ export default function PlansPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function PlansPage() {
+  return (
+    <Suspense fallback={<div className="flex justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-gray-300"/></div>}>
+      <PlansContent />
+    </Suspense>
   );
 }
