@@ -163,16 +163,16 @@ model AiLeadScore {
 }
 
 model FollowUpSequence {
-  id         String   @id @default(uuid())
-  leadId     String   @map("lead_id")
-  lead       Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  channel    String
-  status     String   @default("active")
-  steps      Json     @default("[]")
-  currentStep Int     @default(0) @map("current_step")
-  nextRunAt  DateTime? @map("next_run_at")
+  id          String    @id @default(uuid())
+  leadId      String    @map("lead_id")
+  lead        Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  channel     String
+  status      String    @default("active")
+  steps       Json      @default("[]")
+  currentStep Int       @default(0) @map("current_step")
+  nextRunAt   DateTime? @map("next_run_at")
   completedAt DateTime? @map("completed_at")
-  createdAt  DateTime @default(now()) @map("created_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
   @@index([leadId])
   @@map("follow_up_sequences")
 }
@@ -205,47 +205,47 @@ model Plan {
 }
 
 model Subscription {
-  id                   String   @id @default(uuid())
-  userId               String   @map("user_id")
-  user                 User     @relation(fields: [userId], references: [id])
-  planId               String   @map("plan_id")
-  plan                 Plan     @relation(fields: [planId], references: [id])
-  stripeSubscriptionId String?  @unique @map("stripe_subscription_id")
-  status               String   @default("active")
+  id                   String    @id @default(uuid())
+  userId               String    @map("user_id")
+  user                 User      @relation(fields: [userId], references: [id])
+  planId               String    @map("plan_id")
+  plan                 Plan      @relation(fields: [planId], references: [id])
+  stripeSubscriptionId String?   @unique @map("stripe_subscription_id")
+  status               String    @default("active")
   currentPeriodStart   DateTime? @map("current_period_start")
   currentPeriodEnd     DateTime? @map("current_period_end")
-  cancelAtPeriodEnd    Boolean  @default(false) @map("cancel_at_period_end")
-  createdAt            DateTime @default(now()) @map("created_at")
-  updatedAt            DateTime @updatedAt @map("updated_at")
+  cancelAtPeriodEnd    Boolean   @default(false) @map("cancel_at_period_end")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
   @@index([userId])
   @@map("subscriptions")
 }
 
 model TerritoryListing {
-  id          String   @id @default(uuid())
-  zipCode     String   @unique @map("zip_code")
-  city        String
-  state       String
-  tier        String
-  price       Decimal  @db.Decimal(10,2)
-  monthlyPrice Decimal @map("monthly_price") @db.Decimal(10,2)
-  isAvailable Boolean  @default(true) @map("is_available")
-  ownerId     String?  @map("owner_id")
-  createdAt   DateTime @default(now()) @map("created_at")
+  id           String   @id @default(uuid())
+  zipCode      String   @unique @map("zip_code")
+  city         String
+  state        String
+  tier         String
+  price        Decimal  @db.Decimal(10,2)
+  monthlyPrice Decimal  @map("monthly_price") @db.Decimal(10,2)
+  isAvailable  Boolean  @default(true) @map("is_available")
+  ownerId      String?  @map("owner_id")
+  createdAt    DateTime @default(now()) @map("created_at")
   @@map("territory_listings")
 }
 
 // ════════════════════ TERRITORY MODULE ═══════════════════
 
 model Territory {
-  id          String   @id @default(uuid())
-  zipCode     String   @map("zip_code")
+  id          String    @id @default(uuid())
+  zipCode     String    @map("zip_code")
   city        String
-  state       String   @default("VA")
-  userId      String   @map("user_id")
-  user        User     @relation(fields: [userId], references: [id])
-  isActive    Boolean  @default(true) @map("is_active")
-  assignedAt  DateTime @default(now()) @map("assigned_at")
+  state       String    @default("VA")
+  userId      String    @map("user_id")
+  user        User      @relation(fields: [userId], references: [id])
+  isActive    Boolean   @default(true) @map("is_active")
+  assignedAt  DateTime  @default(now()) @map("assigned_at")
   assignments TerritoryAssignment[]
   notifications TerritoryNotification[]
   @@unique([zipCode, userId])
@@ -275,32 +275,32 @@ model TerritoryNotification {
 // ══════════════════════ SEO MODULE ═══════════════════════
 
 model SeoTemplate {
-  id        String     @id @default(uuid())
+  id        String    @id @default(uuid())
   name      String
   type      String
   content   Json
-  isDefault Boolean    @default(false) @map("is_default")
+  isDefault Boolean   @default(false) @map("is_default")
   pages     SeoPage[]
-  createdAt DateTime   @default(now()) @map("created_at")
-  updatedAt DateTime   @updatedAt @map("updated_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
   @@map("seo_templates")
 }
 
 model SeoPage {
-  id          String      @id @default(uuid())
-  slug        String      @unique
+  id          String       @id @default(uuid())
+  slug        String       @unique
   title       String
-  metaDesc    String      @map("meta_desc")
+  metaDesc    String       @map("meta_desc")
   city        String
   state       String
-  zipCode     String?     @map("zip_code")
+  zipCode     String?      @map("zip_code")
   content     Json
-  isPublished Boolean     @default(false) @map("is_published")
-  templateId  String?     @map("template_id")
+  isPublished Boolean      @default(false) @map("is_published")
+  templateId  String?      @map("template_id")
   template    SeoTemplate? @relation(fields: [templateId], references: [id])
   leads       SeoPageLead[]
-  createdAt   DateTime    @default(now()) @map("created_at")
-  updatedAt   DateTime    @updatedAt @map("updated_at")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
   @@map("seo_pages")
 }
 
